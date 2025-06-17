@@ -1,0 +1,6 @@
+type: "conv"
+kernel_size: 9
+kernel_ch: 1
+sum_to_one: True
+padding: "replicate"
+factor: 1

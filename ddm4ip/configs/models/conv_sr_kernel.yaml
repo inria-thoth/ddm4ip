@@ -1,0 +1,6 @@
+type: "conv_sr"
+factor: 2
+padding: valid
+kernel_ch: 1
+kernel_size: 15
+learn_output_noise: false

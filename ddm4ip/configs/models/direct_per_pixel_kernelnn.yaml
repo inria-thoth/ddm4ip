@@ -1,0 +1,4 @@
+type: direct_per_pixel
+padding: "replicate"
+psf_path: null
+kernel_size: 9

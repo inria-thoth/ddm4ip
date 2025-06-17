@@ -1,0 +1,45 @@
+# @package _global_
+
+defaults:
+ - /models@models.flow: xxxs_flow_32
+ - override /training: default
+ - override /loss: flow_matching
+ - override /dataset: div2k
+ - override /generation: flow
+ - override /dataset/degradation: gaussian_downsampling
+ - override /dataset/noise: gaussian
+
+dataset:
+  degradation:
+    padding: valid
+  noise:
+    std: 0.01
+  inflate_patches: 15
+  patch_size: 64
+  num_patches_per_image: 512
+  patch_cache_size: 512
+  cuda: False
+  space_conditioning: False
+  train_path: ${paths.data}/div2k/single_img/
+  test_path: ${paths.data}/div2k/single_img/
+
+optim:
+  lr: 0.01
+
+loss:
+  n_accum_steps: 1
+  crop_patch_sizes: null
+
+ema:
+  stds: [0.001]
+
+training:
+  batch_size: 64
+  max_val_batches: 1
+  num_workers: 2
+  max_steps: ${parse_nimg:"257Ki"}
+  save_every_steps: ${parse_nimg:"128Ki"}
+  plot_every_steps: ${parse_nimg:"16Ki"}
+  report_every_steps: ${parse_nimg:"16Ki"}
+
+exp_name: sr_exp1

@@ -1,0 +1,47 @@
+# @package _global_
+
+defaults:
+ - /models@models.pretrained_flow: xxxs_flow_256
+ - /models@models.kernel: direct_kernel
+ - /loss@loss.aux: flow_matching
+ - override /training: default
+ - override /dataset: ffhq
+ - override /generation: flow
+ - override /dataset/degradation: motion_blur
+ - override /dataset/noise: gaussian
+
+models:
+  pretrained_flow:
+    path: "${paths.out_path}/flowxxxs_ffhq256-0-1000_mb32_ns0.02_lr1e-2/checkpoints/training-state-4194304.pt"
+  kernel:
+    kernel_size: 28
+    sum_to_one: True
+
+dataset:
+  train_path: "${paths.data}/ffhq/ffhq_256_tr_100.zip"
+  noise:
+    std: 0.02
+
+optim:
+  aux:
+    lr: 0.00001
+  kernel:
+    lr: 0.00004
+
+loss:
+  name: "di"
+  n_inner_steps: 1
+  n_accum_steps: 1
+  sparse_reg: 1
+  center_reg: 0
+
+training:
+  batch_size: 32
+  num_workers: 4
+  max_val_batches: 1
+  max_steps: ${parse_nimg:"1030Ki"}
+  report_every_steps: ${parse_nimg:"16Ki"}
+  plot_every_steps: ${parse_nimg:"128Ki"}
+  save_every_steps: ${parse_nimg:"256Ki"}
+
+exp_name: di_tr1k_ffhq256-5000-5100_motionblur_ks28_noise0.02_direct

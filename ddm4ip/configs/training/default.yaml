@@ -1,0 +1,18 @@
+seed: 42
+log_dir: "${paths.out_path}"
+
+max_val_batches: 2
+save_eval_to_file: False
+
+save_first_step: False
+
+batch_size: ${parse_nimg:512}
+max_steps: ${parse_nimg:"512Mi"}
+report_every_steps: ${parse_nimg:"32Ki"}
+plot_every_steps: ${parse_nimg:"128Ki"}
+save_every_steps: ${parse_nimg:"4Mi"}
+
+checkpoint: null
+
+num_workers: 2
+train: True

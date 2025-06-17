@@ -1,0 +1,18 @@
+# @package _global_
+
+defaults:
+ - _self_
+ - models: null
+ - dataset: null
+ - optim: null
+ - loss: null
+ - training: null
+ - generation: null
+ - exp_name: null
+ - paths: default
+
+ - exp: null
+
+hydra:
+  run:
+    dir: ${training.log_dir}/${exp_name}

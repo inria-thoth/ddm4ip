@@ -1,0 +1,38 @@
+# @package _global_
+
+# Step 3 is the evaluation step.
+# With DiffPIR here, but other pnp options are possible.
+
+defaults:
+ - /dataset@dataset.test: ffhq
+ - override /dataset/degradation@dataset.test.degradation: motion_blur
+ - override /dataset/noise@dataset.test.noise: gaussian
+ - override /training: validation
+ - override /loss: deepinv
+
+dataset:
+  test:
+    noise:
+      std: 0.02
+
+loss:
+  # kernels have a slight corruption at the edges which we crop out
+  crop_filters: 1
+
+models:
+  deepinv_solver:
+    method: diffpir  # can be 'gspnp', 'dpir'
+    prior: DiffUNet  # diffusion U-Net. See deepinv docs for other possible prior networks.
+    large_model: False  # large model is trained on natural images, small model on ffhq.
+    zeta: 0.2
+    lambda: 8.0
+  kernel:
+    path: "${paths.out_path}/di_tr1k_ffhq256-5000-5100_motionblur_ks28_noise0.02_direct/checkpoints/network-snapshot-524288.pkl"
+
+training:
+  batch_size: 128
+  report_every_steps: 512
+  plot_every_steps: 512
+  save_eval_to_file: True
+
+exp_name: diffpir_ffhq256_1k-100-imgs_motionblur

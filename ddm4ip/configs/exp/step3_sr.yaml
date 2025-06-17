@@ -1,0 +1,51 @@
+# @package _global_
+
+# Step 3 is the evaluation step.
+# With DiffPIR here, but other pnp options are possible.
+
+defaults:
+ - /dataset@dataset.test: div2k
+ - override /dataset/degradation@dataset.test.degradation: gaussian_downsampling
+ - override /dataset/noise@dataset.test.noise: gaussian
+ - override /training: validation
+ - override /loss: deepinv
+
+dataset:
+  test:  # div2k dataset from patch to full-image. No conditioning here of course.
+    name: zip
+    cuda: False
+    space_conditioning: False
+    x_flip: False
+    cond: False
+    path: "${paths.data}/gt/img_1_gt.png"
+    noisy_path: "${paths.data}/lr_x2/im_1.png"
+    train_path: null
+    test_path: null
+    noise:
+      std: 0.01
+
+loss:
+  # kernels have a slight corruption at the edges which we crop out
+  crop_filters: 1
+  patch_size: 230
+  padding: 26
+  patch_batch_size: 8
+
+models:
+  deepinv_solver:
+    method: diffpir  # can be 'gspnp', 'dpir'
+    prior: DiffUNet  # diffusion U-Net. See deepinv docs for other possible prior networks.
+    large_model: True  # large model is trained on natural images, small model on ffhq.
+    zeta: 0.3
+    lambda: 6.0
+    sigma: 0.002
+  kernel:
+    path: null
+
+training:
+  batch_size: 128
+  report_every_steps: 512
+  plot_every_steps: 512
+  save_eval_to_file: True
+
+exp_name: diffpir_sr_div2k

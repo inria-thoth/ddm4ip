@@ -1,0 +1,11 @@
+defaults:
+ - degradation: no_degradation
+ - noise: no_noise
+
+name: zip
+cond: False
+cache: False
+x_flip: False
+space_conditioning: True
+
+path: ${paths.data}/parkinglot/parkinglot_5_6.zip

@@ -1,0 +1,33 @@
+# @package _global_
+
+defaults:
+ - /models@models.flow: xxxs_flow_64
+ - /dataset@dataset.train: plot_train16_fullimg
+ - /dataset@dataset.test: plot_train16_fullimg
+ - override /training: default
+ - override /loss: flow_matching
+ - override /generation: flow
+
+optim:
+  lr: 0.01
+
+dataset:
+  train:
+    random_replace_locmap: 0.2
+
+loss:
+  n_accum_steps: 1
+
+ema:
+  stds: [0.05]
+
+training:
+  batch_size: 1024
+  max_val_batches: 1
+  num_workers: 6
+  max_steps: ${parse_nimg:"17Mi"}  # we'll use the 16M checkpoint in step 2
+  save_every_steps: ${parse_nimg:"8Mi"}
+  plot_every_steps: ${parse_nimg:"512Ki"}
+  report_every_steps: ${parse_nimg:"64Ki"}
+
+exp_name: ft_flowxxxs_plot16_ps64_lr1e-2

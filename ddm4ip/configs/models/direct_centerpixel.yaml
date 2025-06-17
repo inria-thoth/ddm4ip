@@ -1,0 +1,9 @@
+type: "direct_center"
+psf_path: null
+kernel_size: 9
+kernel_ch: null  # will be taken from psf-path
+num_psfs: null   # will be taken from psf-path
+padding: "replicate"
+sum_to_one: True
+learn_output_noise: False
+initialization: "random"

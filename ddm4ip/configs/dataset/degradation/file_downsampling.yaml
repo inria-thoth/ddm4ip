@@ -1,0 +1,5 @@
+kind: file_downsampling
+kernel_path: null
+factor: 2
+padding: circular
+kernel_size: null

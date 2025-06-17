@@ -1,0 +1,24 @@
+# DIV2K. Used for spatially-varying deblurring experiment.
+
+defaults:
+ - degradation: gaussian_blur
+ - noise: gaussian
+
+name: patch
+x_flip: True
+patch_size: 64
+# increase actual patch-size to counteract cropping
+# should be equal to the size of the blur kernel used as corruption
+inflate_patches: 0
+num_patches_per_image: 256
+patch_cache_size: 4096
+space_conditioning: True
+random_space_conditioning: False
+random_replace_locmap: 0.0
+full_test: True
+cuda: False
+need_clean: True
+need_noisy: True
+
+train_path: ${paths.data}/div2k_train_full.zip
+test_path: ${paths.data}/div2k_val_full.zip

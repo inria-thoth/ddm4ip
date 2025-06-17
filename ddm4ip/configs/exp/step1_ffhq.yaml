@@ -1,0 +1,38 @@
+# @package _global_
+
+defaults:
+ - /models@models.flow: xxxs_flow_256
+ - override /training: default
+ - override /loss: flow_matching
+ - override /dataset: ffhq
+ - override /generation: flow
+ - override /dataset/degradation: motion_blur
+ - override /dataset/noise: gaussian
+
+models:
+  flow:
+    pretrained_path: null  # change this to do finetuning instead of training from-scratch
+
+dataset:
+  noise:
+    std: 0.02
+
+optim:
+  lr: 0.01
+
+loss:
+  n_accum_steps: 8
+
+ema:
+  stds: [0.05]
+
+training:
+  batch_size: 32
+  max_val_batches: 1
+  num_workers: 4
+  max_steps: ${parse_nimg:"5Mi"}
+  save_every_steps: ${parse_nimg:"2Mi"}
+  plot_every_steps: ${parse_nimg:"128Ki"}
+  report_every_steps: ${parse_nimg:"16Ki"}
+
+exp_name: flowxxxs_ffhq256-0-1000_mb32_ns0.02_lr1e-2

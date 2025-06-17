@@ -1,0 +1,6 @@
+type: "direct"
+kernel_size: 13
+padding: "replicate"
+sum_to_one: True
+factor: 1
+learn_output_noise: False

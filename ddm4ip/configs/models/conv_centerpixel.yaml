@@ -1,0 +1,6 @@
+type: "conv_center"
+kernel_size: 9
+kernel_ch: 1
+padding: "replicate"
+learn_output_noise: False
+sum_to_one: True

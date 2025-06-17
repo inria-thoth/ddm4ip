@@ -1,0 +1,75 @@
+# @package _global_
+
+defaults:
+ - /models@models.pretrained_flow: xxs_flow_64
+ - /models@models.kernel: direct_centerpixel
+ - /dataset@dataset.train: div2k
+ - /dataset@dataset.test: div2k
+ - /loss@loss.aux: flow_matching
+ - override /dataset/degradation@dataset.train.degradation: per_patch_blur
+ - override /dataset/noise@dataset.train.noise: gaussian
+ - override /dataset/degradation@dataset.test.degradation: per_patch_blur
+ - override /dataset/noise@dataset.test.noise: gaussian
+ - override /training: default
+ - override /generation: flow
+
+models:
+  pretrained_flow:
+    path: "${paths.out_path}/ddpd_8x8x27_ns0.01_repl0.2_lr1e-2_perpatch/checkpoints/training-state-8388608.pt"
+  kernel:
+    kernel_size: 27
+    kernel_ch: 1
+    num_psfs: [8, 8]
+    initialization: "random"
+    padding: valid
+    sum_to_one: true
+
+dataset:
+  train:
+    degradation:
+      psf_path: "${paths.data}/psfs/8x8_realpsf_27.pt"
+      padding: "valid"
+      kernel_size: ${models.kernel.kernel_size}
+    noise:
+      std: 0.01
+    inflate_patches: ${models.kernel.kernel_size}
+    cuda: False
+    need_noisy: False
+    space_conditioning: False
+    random_space_conditioning: True
+  test:
+    degradation:
+      psf_path: "${paths.data}/psfs/8x8_realpsf_27.pt"
+      padding: "valid"
+      kernel_size: ${models.kernel.kernel_size}
+    noise:
+      std: 0.01
+    inflate_patches: ${models.kernel.kernel_size}
+    cuda: False
+    space_conditioning: True
+    random_space_conditioning: False
+
+optim:
+  aux:
+    lr: 0.00001
+  kernel:
+    lr: 0.00004
+
+loss:
+  name: "di"
+  n_inner_steps: 1
+  n_accum_steps: 1
+  center_reg: 0.01
+  gaussian_reg: 0.01
+  sparse_reg: 0.1
+
+training:
+  batch_size: 128
+  num_workers: 4
+  max_val_batches: 1
+  max_steps: ${parse_nimg:"3Mi"}
+  report_every_steps: ${parse_nimg:"16Ki"}
+  plot_every_steps: ${parse_nimg:"64Ki"}
+  save_every_steps: ${parse_nimg:"512Ki"}
+
+exp_name: di_div2k_8x8x27_ns0.01_c0.01_s0.1_g0.01_lr1e-5x4_8x8-19psfs_rndcond_perpatch

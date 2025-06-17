@@ -1,0 +1,16 @@
+torch>=2.4
+torchvision
+deepinv>=0.2.2
+numpy
+scipy
+tqdm
+hydra-core
+omegaconf
+pillow
+psutil
+dill
+matplotlib
+tensorboard
+scikit-image
+lpips
+opencv-python

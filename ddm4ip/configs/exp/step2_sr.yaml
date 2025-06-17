@@ -1,0 +1,58 @@
+# @package _global_
+
+defaults:
+ - /models@models.pretrained_flow: xxxs_flow_32
+ - /models@models.kernel: conv_sr_kernel
+ - /loss@loss.aux: flow_matching
+ - override /training: default
+ - override /dataset: div2k
+ - override /generation: flow
+ - override /dataset/degradation: gaussian_downsampling
+ - override /dataset/noise: gaussian
+
+models:
+  pretrained_flow:
+    path: "${paths.out_path}/sr_exp1/checkpoints/training-state-262144.pt"
+  kernel:
+    kernel_size: 15
+    factor: 2
+    padding: valid
+
+dataset:
+  degradation:
+    padding: valid
+  noise:
+    std: 0.01
+  inflate_patches: 15
+  patch_size: 64
+  num_patches_per_image: 512
+  patch_cache_size: 512
+  cuda: False
+  space_conditioning: False
+  train_path: ${paths.data}/div2k/single_img/
+  test_path: ${paths.data}/div2k/single_img/
+
+optim:
+  aux:
+    lr: 0.0001
+  kernel:
+    lr: 0.0004
+
+loss:
+  name: "di"
+  n_inner_steps: 1
+  n_accum_steps: 1
+  sparse_reg: 0.1
+  center_reg: 0.1
+  sum_to_one_reg: 0.1
+
+training:
+  batch_size: 64
+  max_val_batches: 1
+  num_workers: 4
+  max_steps: ${parse_nimg:"256Ki"}
+  save_every_steps: ${parse_nimg:"256Ki"}
+  plot_every_steps: ${parse_nimg:"16Ki"}
+  report_every_steps: ${parse_nimg:"16Ki"}
+
+exp_name: sr_exp2_sr_lr1e-4x4_bs64_creg0.1_sreg0.1_sto0.1_init0.1

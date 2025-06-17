@@ -1,0 +1,34 @@
+# @package _global_
+
+# Step 3 is the evaluation step.
+
+defaults:
+ - /dataset@dataset.test: plot16_fullimgs
+ - override /training: validation
+ - override /loss: deepinv
+
+loss:
+  # kernels have a slight corruption at the edges which we crop out
+  crop_filters: 1
+  patch_size: 128
+  padding: 32
+  patch_batch_size: 512
+
+models:
+  deepinv_solver:
+    method: dpir  # can be 'dpir', 'wiener'. For 'wiener' also set variable 'balance' to e.g. 0.02 (balance between prior and data-fitting)
+    prior: DRUNet  # diffusion U-Net. See deepinv docs for other possible prior networks.
+    # large_model: True  # large model is trained on natural images, small model on ffhq.
+    # zeta: 0.4
+    # lambda: 12.0
+  kernel:
+    path: "${paths.out_path}/di_plot_16-to-5.6-center_8-psfs/checkpoints/network-snapshot-6291456.pkl"
+
+training:
+  batch_size: 1
+  report_every_steps: 8
+  plot_every_steps: 8
+  save_eval_to_file: True
+  save_pred_only: True  # don't save true and corrupted images to keep a reasonable file size
+
+exp_name: dpir_plot16-5.6center_8psfs_6M

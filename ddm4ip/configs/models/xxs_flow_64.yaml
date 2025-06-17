@@ -1,0 +1,7 @@
+kind: flow
+channels: 64
+channel_mult: [1, 2, 3, 4]
+num_blocks: 2
+attn_resolutions: [8]
+dropout: 0
+channels_per_head: 32

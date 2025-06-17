@@ -1,0 +1,13 @@
+defaults:
+ - degradation: no_degradation
+ - noise: no_noise
+
+name: simple_patch
+patch_size: 64
+x_flip: false
+space_conditioning: true
+clean_filter: null
+noisy_filter: null
+
+path: ${paths.data}/parkinglot/parkingd3_patches_16.0.zip
+noisy_path: null

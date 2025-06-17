@@ -1,0 +1,4 @@
+kind: motion_blur
+kernel_size: 32
+intensity: 0.5
+rnd_seed: 1

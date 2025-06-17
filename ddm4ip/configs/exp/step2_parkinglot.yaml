@@ -1,0 +1,66 @@
+# @package _global_
+
+defaults:
+ - /models@models.pretrained_flow: xxxs_flow_64
+ - /models@models.kernel: direct_centerpixel
+ - /dataset@dataset.train: plot_center5.6
+ - /dataset@dataset.test: plot_center5.6
+ - /loss@loss.aux: flow_matching
+ - override /dataset/degradation@dataset.train.degradation: padding
+ - override /dataset/degradation@dataset.test.degradation: padding
+ - override /training: default
+ - override /generation: flow
+
+models:
+  pretrained_flow:
+    path: "${paths.out_path}/ft_flowxxxs_plot16_ps64_lr1e-2/checkpoints/training-state-16777216.pt"
+  kernel:
+    learn_output_noise: True
+    kernel_size: 13
+    kernel_ch: 3
+    num_psfs: [8, 8]
+    initialization: "random"
+    padding: valid
+    sum_to_one: true
+
+dataset:
+  train:
+    space_conditioning: false
+    random_space_conditioning: True
+    inflate_patches: ${models.kernel.kernel_size}
+    need_clean: true
+    degradation:
+      kernel_size: 13
+  test:
+    full_test: true
+    space_conditioning: false
+    random_space_conditioning: True
+    inflate_patches: ${models.kernel.kernel_size}
+    need_clean: true
+    degradation:
+      kernel_size: 13
+
+optim:
+  aux:
+    lr: 0.00001
+  kernel:
+    lr: 0.00004
+
+loss:
+  name: "di"
+  center_reg: 0.01
+  sparse_reg: 0.01
+  gaussian_reg: 0.1
+  n_inner_steps: 1
+  n_accum_steps: 1
+
+training:
+  batch_size: 128
+  num_workers: 6
+  max_val_batches: 1
+  max_steps: ${parse_nimg:"8Mi"}
+  report_every_steps: ${parse_nimg:"16Ki"}
+  plot_every_steps: ${parse_nimg:"128Ki"}
+  save_every_steps: ${parse_nimg:"1Mi"}
+
+exp_name: di_plot_16-to-5.6-center_8-psfs

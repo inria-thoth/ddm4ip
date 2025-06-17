@@ -1,0 +1,8 @@
+defaults:
+ - degradation: gaussian_blur
+ - noise: gaussian
+
+name: zip
+cond: False
+train_path: ${paths.data}/ffhq/ffhq_256_tr_1k.zip
+test_path: ${paths.data}/ffhq/ffhq_256_val.zip

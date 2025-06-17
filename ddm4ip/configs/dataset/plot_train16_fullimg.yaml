@@ -1,0 +1,20 @@
+defaults:
+ - degradation: no_degradation
+ - noise: no_noise
+
+name: patch
+x_flip: False
+patch_size: 64
+inflate_patches: 0
+num_patches_per_image: 1024  # this is the speed-up factor over loading each image individually
+patch_cache_size: 8192
+space_conditioning: True
+random_space_conditioning: False
+random_replace_locmap: 0
+full_test: True
+cuda: False
+need_clean: False
+need_noisy: True
+
+train_path: ${paths.data}/parkinglot/parkinglot_16.zip
+test_path: ${paths.data}/parkinglot/parkinglot_16.zip

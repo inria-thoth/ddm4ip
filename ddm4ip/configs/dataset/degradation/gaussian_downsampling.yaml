@@ -1,0 +1,5 @@
+kind: gaussian_downsampling
+kernel_std: [1.0, 2.0]
+kernel_angle: 0.0
+factor: 2
+padding: circular

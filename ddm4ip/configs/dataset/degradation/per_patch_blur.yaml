@@ -1,0 +1,4 @@
+kind: per_patch_blur
+psf_path: '/scratch/clear/gmeanti/data/psfs/2x2_psf_13_large.pt'
+kernel_size: 13
+padding: "replicate"

@@ -1,0 +1,47 @@
+# @package _global_
+
+# Step 3 is the evaluation step.
+
+defaults:
+ - /dataset@dataset.test: ddpd_fullimages
+ - override /dataset/degradation@dataset.test.degradation: per_pixel_blur
+ - override /dataset/noise@dataset.test.noise: gaussian
+ - override /training: validation
+ - override /loss: deepinv
+
+loss:
+  # kernels have a slight corruption at the edges which we crop out
+  crop_filters: 1
+  patch_size: 128
+  padding: 32
+  patch_batch_size: 512
+
+dataset:
+  test:
+    degradation:
+      psf_path: "${paths.data}/psfs/8x8_realpsf_27.pt"
+      padding: "valid"
+    noise:
+      std: 0.02
+
+models:
+  deepinv_solver:
+    method: dpir  # can be 'dpir', 'wiener'. For 'wiener' also set variable 'balance' to e.g. 0.02 (balance between prior and data-fitting)
+    prior: DRUNet  # diffusion U-Net. See deepinv docs for other possible prior networks.
+    # large_model: True  # large model is trained on natural images, small model on ffhq.
+    # zeta: 0.4
+    # lambda: 12.0
+  kernel:
+    path: "${paths.out_path}/di_ddpd_8x8x27_ns0.02_c1e-2_s1e-1_g0.02_lr1e-5x4_8x8-19-psfs_patch/checkpoints/network-snapshot-1048576.pkl"
+
+training:
+  batch_size: 1
+  report_every_steps: 16
+  plot_every_steps: 16
+  save_eval_to_file: True
+
+exp_name: dpir_ddpd_8psfs_1M_v2
+
+
+# v1: di_div2k_8x8x27_ns0.02_c1e-2_s1e-1_g0_lr1e-5x4_8x8-psfs_patch
+# v2: di_ddpd_8x8x27_ns0.02_c1e-2_s1e-1_g0.02_lr1e-5x4_8x8-19-psfs_patch

@@ -1,0 +1,3 @@
+kind: gaussian_blur
+kernel_std: 3.2
+kernel_angle: 0.0

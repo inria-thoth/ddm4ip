@@ -1,0 +1,12 @@
+defaults:
+ - degradation: gaussian_blur
+ - noise: gaussian
+
+name: zip
+cond: False
+cache: False
+x_flip: False
+space_conditioning: True
+
+train_path: ${paths.data}/ddpd/train/
+test_path: ${paths.data}/ddpd/test/

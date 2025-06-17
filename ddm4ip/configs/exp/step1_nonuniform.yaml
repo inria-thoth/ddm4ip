@@ -1,0 +1,44 @@
+# @package _global_
+
+# Fine-tune a model pretrained on clean div2k patches (patch-size 64), using a space-varying blur.
+
+defaults:
+ - /models@models.flow: xxs_flow_64
+ - override /training: default
+ - override /loss: flow_matching
+ - override /dataset: ddpd_patches
+ - override /generation: flow
+ - override /dataset/degradation: per_patch_blur
+ - override /dataset/noise: gaussian
+
+dataset:
+  degradation:
+    psf_path: "${paths.data}/psfs/8x8_realpsf_27.pt"
+    kernel_size: 27
+  noise:
+    std: 0.01
+  patch_size: 64
+  num_patches_per_image: 256
+  patch_cache_size: 4096
+  cuda: True  # the per-pixel-blur degradation is compute intensive. This puts data computations on CUDA speeding them up!
+  random_replace_locmap: 0.2
+
+optim:
+  lr: 0.01
+
+loss:
+  n_accum_steps: 2
+
+ema:
+  stds: [0.05]
+
+training:
+  batch_size: 512
+  max_val_batches: 1
+  num_workers: 4
+  max_steps: ${parse_nimg:"33Mi"}
+  save_every_steps: ${parse_nimg:"8Mi"}
+  plot_every_steps: ${parse_nimg:"512Ki"}
+  report_every_steps: ${parse_nimg:"64Ki"}
+
+exp_name: ddpd_8x8x27_ns0.01_repl0.2_lr1e-2_perpatch

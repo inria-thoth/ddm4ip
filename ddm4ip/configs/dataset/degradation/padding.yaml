@@ -1,0 +1,3 @@
+kind: "padding"
+kernel_size: 9
+padding: "valid"

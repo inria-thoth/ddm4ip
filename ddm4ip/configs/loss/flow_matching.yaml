@@ -1,0 +1,3 @@
+name: "flow_matching"
+crop_patch_sizes: null
+n_accum_steps: 1
