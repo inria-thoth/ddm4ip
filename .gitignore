@@ -14,7 +14,6 @@ notebooks/checkpoints/
 *.pkl
 poisson-gaussian.pdf
 latex/arxiv_upload_12_06/
-data/
 results/
 
 psf data/
