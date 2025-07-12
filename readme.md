@@ -8,10 +8,11 @@ This repository implement the code for the article: **Unsupervised Imaging Inver
 
 
 ## Abstract
-This work addresses image restoration tasks through the lens of inverse problems using unpaired datasets. In contrast to traditional approaches—which typically assume full knowledge of the forward model or access to paired datasets of degraded and ground-truth images—the proposed method operates under minimal assumptions and relies only on small, unpaired datasets. This makes it particularly well-suited for real-world scenarios, where the forward model is often unknown or difficult to model accurately, and collecting paired data is costly or infeasible.
+This work addresses image restoration tasks through the lens of inverse problems using unpaired datasets. In contrast to traditional approaches—which typically assume full knowledge of the forward model or access to paired degraded and ground-truth images—the proposed method operates under minimal assumptions and relies only on small, unpaired datasets. This makes it particularly well-suited for real-world scenarios, where the forward model is often unknown or mis-specified, and collecting paired data is costly or infeasible.
 The method leverages conditional flow matching to model the distribution of degraded observations, while simultaneously learning the forward model via a distribution-matching loss that arises naturally from the framework.
 Empirically, it outperforms both single-image blind and unsupervised approaches on deblurring and non-uniform point spread function (PSF) calibration tasks. It also matches state-of-the-art performance on blind super-resolution.
-We also showcase the effectiveness of our method with a proof of concept for lens calibration: a real-world application traditionally requiring time-consuming experiments and specialized equipment. In contrast, our approach achieves this with minimal data acquisition effort.
+We also showcase the effectiveness of our method with a proof of concept for lens calibration: a real-world application traditionally requiring time-
+consuming experiments and specialized equipment. In contrast, our approach achieves this with minimal data acquisition effort.
 
 ## Setup & Installation
 
