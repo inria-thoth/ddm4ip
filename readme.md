@@ -1,6 +1,6 @@
 # DDM4IP
 
-[Arxiv version of the article]()
+[Arxiv version of the article](https://arxiv.org/abs/2506.14605)
 
 This repository implement the code for the article: **Unsupervised Imaging Inverse Problems with Diffusion Distribution Matching**.
 
@@ -140,5 +140,13 @@ Most of them should be runnable following instructions within this repository. I
 If you find the paper useful for your own research, please remember to cite our work:
 
 ```bibtex
-
+@misc{meanti25ddm4ip,
+      title={Unsupervised Imaging Inverse Problems with Diffusion Distribution Matching},
+      author={Giacomo Meanti and Thomas Ryckeboer and Michael Arbel and Julien Mairal},
+      year={2025},
+      eprint={2506.14605},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2506.14605},
+}
 ```
