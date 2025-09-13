@@ -54,7 +54,7 @@ def instantiate_single_kernel(pert_cfg, noise_model):
             noise_model=noise_model
         )
     elif pert_kind == "gaussian_downsampling":
-        from degradations.downsampling import Downsampling
+        from deepinv.physics.blur import Downsampling
         filter = deepinv.physics.blur.gaussian_blur(
             sigma=pert_cfg['kernel_std'],
             angle=pert_cfg.get('kernel_angle', 0),
@@ -67,7 +67,7 @@ def instantiate_single_kernel(pert_cfg, noise_model):
             noise_model=noise_model
         )
     elif pert_kind == "file_downsampling":
-        from degradations.downsampling import Downsampling
+        from deepinv.physics.blur import Downsampling
         filter = load_filter_from_file(pert_cfg["kernel_path"], kernel_size=pert_cfg.get("kernel_size", None))
         return Downsampling(
             img_size=None,

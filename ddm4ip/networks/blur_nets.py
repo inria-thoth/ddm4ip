@@ -1,12 +1,12 @@
 import abc
 from enum import Enum
 from typing import Literal, Union
+import deepinv
 import torch
 import torch.nn as nn
 
 from ddm4ip.degradations.blur import Blur
 from ddm4ip.degradations.degradation import GaussianNoise
-from ddm4ip.degradations.downsampling import Downsampling
 from ddm4ip.degradations.varpsf import PerPixelBlur
 from ddm4ip.networks.unets import Block, MPConv, mp_silu
 from ddm4ip.psf.psf import PSF, get_psf_at_pos, norm_sum_to_one
@@ -51,7 +51,7 @@ class BlurNetBase(nn.Module, abc.ABC):
                 **deg_kwargs
             )
         elif degradation_type == BlurDegradationType.DOWNSAMPLING:
-            self.degradation = Downsampling(
+            self.degradation = deepinv.physics.Downsampling(
                 noise_model=GaussianNoise(sigma=0.0),
                 padding=padding,
                 **deg_kwargs

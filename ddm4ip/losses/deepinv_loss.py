@@ -6,7 +6,6 @@ import torchvision.transforms.v2.functional as TF
 
 from ddm4ip.data.base import Batch
 from ddm4ip.degradations.blur import Blur
-from ddm4ip.degradations.downsampling import Downsampling
 from ddm4ip.degradations.varpsf import PerPatchInterpolatedBlur, PerPixelBlur
 from ddm4ip.losses.base import AbstractLoss
 from ddm4ip.psf.psf import norm_sum_to_one
@@ -106,7 +105,7 @@ class DeepInvLoss(AbstractLoss):
         if self.crop_filters > 0:
             filters = filters[..., self.crop_filters:-self.crop_filters, self.crop_filters:-self.crop_filters]
             filters = norm_sum_to_one(filters)
-        if isinstance(self.physics, (Blur, PerPatchInterpolatedBlur, Downsampling)):
+        if isinstance(self.physics, (Blur, PerPatchInterpolatedBlur, deepinv.physics.Downsampling)):
             self.physics.update_parameters(filter=filters)
         elif isinstance(self.physics, PerPixelBlur):
             self.physics.update_parameters(filters=filters)
