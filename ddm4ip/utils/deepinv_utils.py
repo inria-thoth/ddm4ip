@@ -1,8 +1,5 @@
-import numpy as np
 import torch
 import deepinv
-import skimage
-
 from .metrics import calc_psnr
 from .torch_utils import center, uncenter
 
@@ -147,26 +144,3 @@ class DPSWrapper(deepinv.sampling.DPS):
             out = uncenter(out)
 
         return out
-
-
-class WienerSolver(torch.nn.Module):
-    def __init__(self, balance: float):
-        super().__init__()
-        self.balance = balance
-
-    def forward(self, y, physics, **kwargs):
-        batch_size = y.shape[0]
-        channels = y.shape[1]
-        y_np = y.numpy(force=True)
-        x_np = np.empty_like(y_np)
-        filters_np = physics.filter.numpy(force=True)
-
-        for i in range(batch_size):
-            for ch in range(channels):
-                c_filter = filters_np[i, ch]
-                c_y = y_np[i, ch]
-                x_np[i, ch] = skimage.restoration.wiener(c_y, c_filter, balance=self.balance)
-                # x_np[i, ch] = skimage.restoration.unsupervised_wiener(c_y, c_filter)[0]
-        x_pt = torch.from_numpy(x_np).to(dtype=y.dtype, device=y.device)
-        return x_pt
-

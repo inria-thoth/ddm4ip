@@ -22,7 +22,8 @@ from ddm4ip.networks.blur_nets import BlurDegradationType
 from ddm4ip.trainers.base import BaseTrainer, init_trts_dataloaders
 from ddm4ip.trainers.plots import plot_spacevarying_kernels
 from ddm4ip.utils import distributed
-from ddm4ip.utils.deepinv_utils import DinvReconstructorWrapper, GSPnP, WienerSolver, DPSWrapper
+from ddm4ip.utils.deepinv_utils import DinvReconstructorWrapper, GSPnP, DPSWrapper
+from ddm4ip.utils.wiener import WienerSolver
 from ddm4ip.utils.diffpir import DiffPIR
 from ddm4ip.utils.torch_utils import write_img_pt
 
@@ -194,7 +195,6 @@ class DeepinvDenoiserTrainer(BaseTrainer):
         # The physics is the one modeled and learned using DiffInstruct
         from ddm4ip.degradations.blur import Blur
         from ddm4ip.degradations.varpsf import PerPixelBlur
-        from ddm4ip.degradations.downsampling import Downsampling
         kernel_nn = self.models["kernel_nn"]
         if self.physics is None:
             noise_sigma = self.get_noise_level(self.dsets[Datasplit.TEST], kernel_nn)
@@ -211,17 +211,18 @@ class DeepinvDenoiserTrainer(BaseTrainer):
                 elif deg_type == BlurDegradationType.PER_PIXEL_BLUR:
                     self.physics = PerPixelBlur(
                         filters=None,
-                        padding=kernel_nn.padding,
+                        padding=kernel_nn.padding,  # type: ignore
                         noise_model=noise_model,
                         device=self.device  # type: ignore
                     )
                 elif deg_type == BlurDegradationType.DOWNSAMPLING:
                     dset = self.dsets[Datasplit.TEST]
                     assert dset is not None
-                    self.physics = Downsampling(
+                    self.physics = dinv.physics.Downsampling(
+                        img_size=None,
                         filter=None,
-                        padding="reflect",#kernel_nn.padding,
-                        img_size=dset.clean_img_size,
+                        padding="reflect",
+                        factor=kernel_nn.factor,  # type: ignore
                         device=self.device  # type: ignore
                     )
                 else:
