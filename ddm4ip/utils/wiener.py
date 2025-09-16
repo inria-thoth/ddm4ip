@@ -1,13 +1,33 @@
 import math
+import deepinv
 import torch
 import skimage.restoration.deconvolution
 
 from ddm4ip.utils.torch_utils import center, uncenter
 
-
 __all__ = (
     "WienerSolver",
+    "UnsupervisedWienerSolver",
 )
+
+
+class UnsupervisedWienerSolver(torch.nn.Module):
+    def __init__(self, normalize: bool = True):
+        self.normalize = normalize
+
+    def balance_from_sigma(self, sigma):
+        return min(1e-5, sigma * 2)
+
+    def forward(self, y, physics, **kwargs):
+        # Extract noise model to determine sigma
+        if isinstance(physics.noise_model, deepinv.physics.GaussianNoise):
+            sigma = physics.noise_model.sigma
+        elif isinstance(physics.noise_model, deepinv.physics.ZeroNoise):
+            sigma = 0.0
+        else:
+            raise ValueError(f"UnsupervisedWienerSolver cannot extract noise value from noise model of type {type(physics.noise_model)}")
+        balance = self.balance_from_sigma(sigma)
+        return WienerSolver(balance=balance, normalize=self.normalize)(y, physics, **kwargs)
 
 
 class WienerSolver(torch.nn.Module):

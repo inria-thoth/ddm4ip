@@ -1,0 +1,12 @@
+kind: edm
+dropout: 0.05
+embedding_type: positional
+decoder_type: standard
+encoder_type: standard
+channel_mult_noise: 1
+resample_filter: [1, 1]
+model_channels: 128
+channel_mult: [1, 2, 2, 2]
+model_type: SongUNet
+use_fp16: True
+path: null

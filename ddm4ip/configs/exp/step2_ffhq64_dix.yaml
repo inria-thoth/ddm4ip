@@ -1,0 +1,61 @@
+# @package _global_
+
+defaults:
+ - /models@models.pretrained_flow: edm_ffhq_uncond_vp
+ - /models@models.kernel: direct_kernel
+ - /loss@loss.aux: edm
+ - override /training: default
+ - override /dataset: ffhq
+ - override /generation: flow
+ - override /dataset/train/degradation: gaussian_blur
+ - override /dataset/train/noise: gaussian
+ - override /dataset/test/degradation: gaussian_blur
+ - override /dataset/test/noise: gaussian
+
+models:
+  pretrained_flow:
+    path: "${paths.data}/edm/ffhq-64x64-uncond-vp.pkl"
+  kernel:
+    kernel_size: 17
+    sum_to_one: True
+
+dataset:
+  train:
+    path: "${paths.data}/ffhq/ffhq_256_tr_100.zip"
+    degradation:
+      sigma: 2.0
+    noise:
+      std: 0.02
+  test:
+    path: "${paths.data}/ffhq/ffhq_256_tr_100.zip"
+    degradation:
+      sigma: 2.0
+    noise:
+      std: 0.02
+
+optim:
+  aux:
+    lr: 0.00001
+  kernel:
+    lr: 0.00004
+
+loss:
+  name: "dix"
+  n_inner_steps: 1
+  n_accum_steps: 1
+  sparse_reg: 0
+  center_reg: 0
+  restorer:
+    type: wiener
+    balance: 0.04
+
+training:
+  batch_size: 32
+  num_workers: 4
+  max_val_batches: 1
+  max_steps: ${parse_nimg:"1030Ki"}
+  report_every_steps: ${parse_nimg:"16Ki"}
+  plot_every_steps: ${parse_nimg:"128Ki"}
+  save_every_steps: ${parse_nimg:"256Ki"}
+
+exp_name: di_tr1k_ffhq256-5000-5100_motionblur_ks28_noise0.02_direct

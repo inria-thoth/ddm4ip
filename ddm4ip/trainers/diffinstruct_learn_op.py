@@ -119,7 +119,7 @@ class DiffinstructOpTrainer(BaseTrainer):
         }
 
     def init_loss(self, cfg, models):
-        loss = DiffInstructOnY(cfg, **models)
+        loss = DiffInstructOnY(cfg, **models)  # pyright: ignore[reportArgumentType]
         return loss
 
     def validate_batch(self, val_batch):
@@ -166,4 +166,4 @@ class DiffinstructOpTrainer(BaseTrainer):
             self.log_image(p4, 'debug/conditioning-distribution', tb_writer)
 
         if hasattr(models["kernel_nn"], "sigma"):
-            tb_writer.add_scalar('eval/learned_noise', models["kernel_nn"].sigma.item(), self.global_step)
+            tb_writer.add_scalar('eval/learned_noise', models["kernel_nn"].sigma.item(), self.global_step)  # pyright: ignore[reportCallIssue]

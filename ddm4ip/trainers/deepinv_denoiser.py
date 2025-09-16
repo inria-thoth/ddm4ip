@@ -16,9 +16,8 @@ from deepinv.optim.dpir import get_DPIR_params
 from deepinv.utils.parameters import get_GSPnP_params
 
 from ddm4ip.data.base import Batch, Datasplit, init_dataset
-from ddm4ip.degradations.degradation import init_noise
 from ddm4ip.losses.deepinv_loss import DeepInvLoss
-from ddm4ip.networks.blur_nets import BlurDegradationType
+from ddm4ip.networks.blur_nets import AbstractBlurNet
 from ddm4ip.trainers.base import BaseTrainer, init_trts_dataloaders
 from ddm4ip.trainers.plots import plot_spacevarying_kernels
 from ddm4ip.utils import distributed
@@ -191,53 +190,6 @@ class DeepinvDenoiserTrainer(BaseTrainer):
 
         return models
 
-    def get_physics(self, cfg) -> dinv.physics.Physics:
-        # The physics is the one modeled and learned using DiffInstruct
-        from ddm4ip.degradations.blur import Blur
-        from ddm4ip.degradations.varpsf import PerPixelBlur
-        kernel_nn = self.models["kernel_nn"]
-        if self.physics is None:
-            noise_sigma = self.get_noise_level(self.dsets[Datasplit.TEST], kernel_nn)
-            noise_model = init_noise({"kind": "gaussian", "std": noise_sigma})
-
-            if (deg_type := getattr(kernel_nn, "degradation_type", None)) is not None:
-                if deg_type == BlurDegradationType.BLUR:
-                    self.physics = Blur(
-                        filter=None,
-                        padding="replicate",  # Shouldn't be 'valid', or the complex and brittle patching code fails
-                        noise_model=noise_model,
-                        device=self.device  # type: ignore
-                    )
-                elif deg_type == BlurDegradationType.PER_PIXEL_BLUR:
-                    self.physics = PerPixelBlur(
-                        filters=None,
-                        padding=kernel_nn.padding,  # type: ignore
-                        noise_model=noise_model,
-                        device=self.device  # type: ignore
-                    )
-                elif deg_type == BlurDegradationType.DOWNSAMPLING:
-                    dset = self.dsets[Datasplit.TEST]
-                    assert dset is not None
-                    self.physics = dinv.physics.Downsampling(
-                        img_size=None,
-                        filter=None,
-                        padding="reflect",
-                        factor=kernel_nn.factor,  # type: ignore
-                        device=self.device  # type: ignore
-                    )
-                else:
-                    raise NotImplementedError(deg_type)
-            elif isinstance(kernel_nn, dinv.physics.Physics):
-                # path taken when doing baselines (true degradation kernels)
-                # Adapter speeds up baseline when using per-pixel blurs
-                # self.physics = SpaceToCenterAdapter(kernel_nn, img_h=128, img_w=128)
-                self.physics = kernel_nn
-            else:
-                raise ValueError("Failed to initialize physics for the provided step-2 NN.")
-            distributed.print0(f"Initialized physics: {self.physics}")
-
-        return self.physics
-
     def get_noise_level(self, test_dset, kernel_model) -> float:
         if hasattr(kernel_model, "sigma"):
             print(f"Overriding provided sigma with sigma from model ({kernel_model.sigma.item()})")
@@ -249,9 +201,9 @@ class DeepinvDenoiserTrainer(BaseTrainer):
         return noise_level.item() if isinstance(noise_level, torch.Tensor) else noise_level
 
     def init_loss(self, cfg, models) -> DeepInvLoss:
+        assert isinstance(models["kernel_nn"], AbstractBlurNet)
         return DeepInvLoss(
             cfg,
-            self.get_physics(cfg),
             deepinv_model=models["deepinv_model"],
             kernel_nn=models["kernel_nn"]
         )
@@ -266,9 +218,10 @@ class DeepinvDenoiserTrainer(BaseTrainer):
                 img_batch = torch.cat([val_batch.corrupt.cpu(), pred_img.cpu(), val_batch.clean.cpu()], dim=-1)
             else:
                 img_batch = torch.cat([pred_img.cpu(), val_batch.clean.cpu()], dim=-1)
-            # Filters are just saved as pt, since it's too hard to convert them into good
-            # looking images for all possible situations.
-            torch.save(filters, os.path.join(self.eval_dir, f"kernel_{self.global_step:05d}.pt"))
+            if filters is not None:
+                # Filters are just saved as pt, since it's too hard to convert them into good
+                # looking images for all possible situations.
+                torch.save(filters, os.path.join(self.eval_dir, f"kernel_{self.global_step:05d}.pt"))
             assert img_batch.dim() == 4
             for i in range(img_batch.shape[0]):
                 write_img_pt(img_batch[i], os.path.join(self.eval_dir, f"img_{self.global_step + i:05d}.png"))

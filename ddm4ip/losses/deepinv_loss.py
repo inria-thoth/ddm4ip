@@ -5,10 +5,8 @@ import torch
 import torchvision.transforms.v2.functional as TF
 
 from ddm4ip.data.base import Batch
-from ddm4ip.degradations.blur import Blur
-from ddm4ip.degradations.varpsf import PerPatchInterpolatedBlur, PerPixelBlur
 from ddm4ip.losses.base import AbstractLoss
-from ddm4ip.psf.psf import norm_sum_to_one
+from ddm4ip.networks.blur_nets import AbstractBlurNet
 from ddm4ip.utils.metrics import LPIPS, calc_psnr, calc_ssim
 from ddm4ip.utils.torch_utils import img2patches, patches2img
 
@@ -16,13 +14,11 @@ from ddm4ip.utils.torch_utils import img2patches, patches2img
 class DeepInvLoss(AbstractLoss):
     def __init__(self,
                  config: Mapping[str, Any],
-                 physics: deepinv.physics.Physics,
                  deepinv_model: torch.nn.Module,
-                 kernel_nn: torch.nn.Module):
+                 kernel_nn: AbstractBlurNet):
         super().__init__(has_val_loss=True)
         self.deepinv_model = deepinv_model
         self.kernel_nn = kernel_nn
-        self.physics = physics
         self.lpips = LPIPS(net_type="alex").cuda()
         loss_cfg = config["loss"]
         self.crop_filters: int = loss_cfg.get("crop_filters", 0)
@@ -30,7 +26,7 @@ class DeepInvLoss(AbstractLoss):
         self.padding: int = loss_cfg.get("padding", 0)
         self.patch_batch_size: int = loss_cfg.get("patch_batch_size", 1)
 
-    def run_model(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
+    def run_model(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor | None]:
         assert batch.corrupt is not None
 
         data_resolution = batch.corrupt.shape[-2], batch.corrupt.shape[-1]
@@ -48,7 +44,7 @@ class DeepInvLoss(AbstractLoss):
             else:
                 img_and_cond = batch.corrupt
             patches = img2patches(img_and_cond, patch_size=self.patch_size + self.padding, stride=self.patch_size)
-            restored_patches, corruption_filters = self.run_on_iterable(patches, image_c)
+            restored_patches, corruption_filters = self.run_on_iterable(patches, image_c, **batch.meta, sigma=batch.noise_level)
             restored_patches = [p.squeeze(0) for p in restored_patches]
             patch_size_mult = restored_patches[0].shape[-1] / patches[0].shape[-1]
             def _crop(x):
@@ -65,14 +61,14 @@ class DeepInvLoss(AbstractLoss):
             restored_image, corruption_filters = self.run_on_data(
                 y=batch.corrupt.cuda(),
                 x=batch.clean.cuda() if batch.clean is not None else None,
-                conditioning=batch.corrupt_conditioning.cuda() if batch.corrupt_conditioning is not None else None
+                conditioning=batch.corrupt_conditioning.cuda() if batch.corrupt_conditioning is not None else None,
+                **batch.meta, sigma=batch.noise_level
             )
             restored_image = restored_image.cpu()
-            corruption_filters = corruption_filters.cpu()
         # Update physics based on conditioning.
         return restored_image, corruption_filters
 
-    def run_on_iterable(self, y_and_cond: Iterable[torch.Tensor], y_channels: int) -> tuple[list[torch.Tensor], torch.Tensor]:
+    def run_on_iterable(self, y_and_cond: Iterable[torch.Tensor], y_channels: int, **kwargs) -> tuple[list[torch.Tensor], torch.Tensor | None]:
         out_patches: list[torch.Tensor] = []
         out_filters = []
         sub_batch = []
@@ -83,9 +79,10 @@ class DeepInvLoss(AbstractLoss):
                 cond_stack = torch.cat([b[1] for b in sub_batch], dim=0).cuda()
                 if cond_stack.numel() == 0:
                     cond_stack = None
-                restored, filters = self.run_on_data(y_stack, x=None, conditioning=cond_stack)
+                restored, filters = self.run_on_data(y_stack, x=None, conditioning=cond_stack, **kwargs)
                 out_patches.extend(restored.cpu().split(1, dim=0))
-                out_filters.append(filters.cpu())
+                if filters is not None:
+                    out_filters.append(filters)
                 sub_batch = []
         if len(sub_batch) > 0:
             y_stack = torch.cat([b[0] for b in sub_batch], dim=0).cuda()
@@ -94,28 +91,29 @@ class DeepInvLoss(AbstractLoss):
                 cond_stack = None
             restored, filters = self.run_on_data(y_stack, x=None, conditioning=cond_stack)
             out_patches.extend(restored.cpu().split(1, dim=0))
-            out_filters.append(filters.cpu())
+            if filters is not None:
+                out_filters.append(filters)
 
         # out_patches = torch.cat(out_patches, 0)  # N, C, pS, pS
-        out_filters = torch.cat(out_filters, 0)
+        if len(out_filters) > 0:
+            out_filters = torch.cat(out_filters, 0)
+        else:
+            out_filters = None
         return out_patches, out_filters
 
-    def run_on_data(self, y: torch.Tensor, x: torch.Tensor | None, conditioning: torch.Tensor | None) -> tuple[torch.Tensor, torch.Tensor]:
-        filters = self.kernel_nn.get_kernel(img=y, conditioning=conditioning)
-        if self.crop_filters > 0:
-            filters = filters[..., self.crop_filters:-self.crop_filters, self.crop_filters:-self.crop_filters]
-            filters = norm_sum_to_one(filters)
-        if isinstance(self.physics, (Blur, PerPatchInterpolatedBlur, deepinv.physics.Downsampling)):
-            self.physics.update_parameters(filter=filters)
-        elif isinstance(self.physics, PerPixelBlur):
-            self.physics.update_parameters(filters=filters)
-        else:
-            raise NotImplementedError(f"Physics of type {type(self.physics)} not implemented in DeepInvLoss.")
-        x_net = self.deepinv_model(
-            y, self.physics, x_gt=x, compute_metrics=False
+    def run_on_data(self, y: torch.Tensor, x: torch.Tensor | None, conditioning: torch.Tensor | None, **kwargs) -> tuple[torch.Tensor, torch.Tensor | None]:
+        physics = self.kernel_nn.get_physics(
+            conditioning=conditioning, crop_filters=self.crop_filters, **kwargs
         )
-        x_net = torch.clamp(x_net, 0, 1)
-        return x_net, filters
+        x_net = self.deepinv_model(
+            y, physics, x_gt=x, compute_metrics=False
+        ).clamp(0, 1)
+        kernels = None
+        if hasattr(physics, "filter"):
+            kernels = physics.filter.detach().cpu() # pyright: ignore[reportCallIssue]
+        elif hasattr(physics, "filters"):
+            kernels = physics.filters.detach().cpu() # pyright: ignore[reportCallIssue]
+        return x_net, kernels
 
     def compute_img_metrics(self, x_recon: torch.Tensor, x_gt: torch.Tensor):
         metrics = {
@@ -141,7 +139,7 @@ class DeepInvLoss(AbstractLoss):
         }
 
     @torch.no_grad()
-    def val_loss_with_output(self, trainer, batch: Batch) -> tuple[dict[str, float], torch.Tensor, torch.Tensor]:
+    def val_loss_with_output(self, trainer, batch: Batch) -> tuple[dict[str, float], torch.Tensor, torch.Tensor | None]:
         pred, filters = self.run_model(batch)
         loss_info = {}
         if batch.clean is not None:

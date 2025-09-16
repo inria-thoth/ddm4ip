@@ -36,6 +36,16 @@ def create_optimizer(config, *parameters):
     return optim, lr_scheduler
 
 
+def make_ddp(model: torch.nn.Module, **kwargs):
+    if distributed.get_world_size() > 1:
+        return torch.nn.parallel.DistributedDataParallel(
+            model,
+            device_ids=[distributed.get_local_rank()],
+            **kwargs
+        )
+    return model
+
+
 def learning_rate_schedule(cur_step, batch_size, ref_nimg=70e6, rampup_nimg=10e6):
     mul = 1.0
     if ref_nimg > 0:

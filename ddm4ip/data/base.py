@@ -4,7 +4,6 @@ from typing import Any, Generic, TypeVar
 import typing
 
 import deepinv
-from omegaconf import DictConfig
 import torch
 import torch.utils.data
 
@@ -110,7 +109,7 @@ class DatasetType(typing.Protocol, Generic[CORR_TYPE]):
         ...
 
     @property
-    def noise_level(self) -> torch.Tensor | float:
+    def noise_level(self) -> torch.Tensor | float | None:
         raise NotImplementedError
 
 
@@ -175,60 +174,93 @@ def init_dataloader(
         )
 
 
-def init_dataset(cfg: DictConfig, split: Datasplit, is_paired: bool):
-    """Support initializing dataset from two configuration styles:
-    1. Specify both train/test datasets in a single configuration,
-        so they will have the same degradation model. Must be under
-        config['dataset']. The configuration must have separate
-        'train_path' and 'test_path' keys to load the different splits.
-    2. Specify train and test datasets in separate configurations
+def init_dataset(cfg: dict[str, Any], split: Datasplit, is_paired: bool):
+    """Support initializing dataset from single configuration style:
+    1. Specify train and test datasets in separate configurations
         under config['dataset']['train'] and config['dataset']['test'].
-    Note that the test dataset is optional but the train dataset is mandatory.
     """
     dset_cfg = cfg["dataset"]
-    path_keys = {
-        Datasplit.TRAIN: "train_path",
-        Datasplit.TEST: "test_path",
-    }
-    if split.value in dset_cfg:
-        dset_cfg = dset_cfg[split.value]
-        data_path = dset_cfg.get("path", dset_cfg.get(path_keys[split]))
-    else:
-        data_path = dset_cfg.get(path_keys[split])
-    if data_path is None:
+    if split.value not in dset_cfg:
         raise RuntimeError(
             f"{split.name} dataset configuration has no path specified."
         )
-    perturbation = init_perturbation(dset_cfg.degradation, dset_cfg.noise)
-
-    dset_name = dset_cfg["name"]
-    shuffle_clean = split == Datasplit.TRAIN and not is_paired
-    if dset_name == 'zip':
-        from .image_folder_dataset import ZipFileDataset
-        return ZipFileDataset(
-            data_path,
-            degradation=perturbation,
-            shuffle_clean=shuffle_clean,
-            dset_cfg=dset_cfg,
+    split_cfg = dset_cfg[split.value]
+    if "path" in split_cfg:
+        from .data2 import KnownCorruptionDataset
+        return KnownCorruptionDataset(
+            path=split_cfg["path"],
+            corruption=init_perturbation(split_cfg["degradation"], split_cfg["noise"]), # pyright: ignore[reportArgumentType]
             split=split,
+            dset_cfg=split_cfg,
+            shuffle_clean=split == Datasplit.TRAIN and not is_paired
         )
-    elif dset_name == 'patch':
-        from .patch_dataset import PatchDataset
-        return PatchDataset(
-            data_path,
-            degradation=perturbation,
-            shuffle_clean=shuffle_clean,
-            dset_cfg=dset_cfg,
+    elif "clean_path" in split_cfg or "noisy_path" in split_cfg:
+        from .data2 import UnknownCorruptionDataset
+        return UnknownCorruptionDataset(
+            clean_path=split_cfg["clean_path"],
+            noisy_path=split_cfg["noisy_path"],
             split=split,
-        )
-    elif dset_name == 'simple_patch':
-        from .simple_patch_dataset import SimplePatchDataset
-        return SimplePatchDataset(
-            data_path,
-            degradation=perturbation,
-            shuffle_clean=shuffle_clean,
-            dset_cfg=dset_cfg,
-            split=split,
+            dset_cfg=split_cfg,
+            shuffle_clean=split == Datasplit.TRAIN and not is_paired
         )
     else:
-        raise ValueError(dset_name)
+        raise ValueError(f"Dataset for split {split.name} does not have correctly set paths.")
+
+
+# def init_dataset(cfg: DictConfig, split: Datasplit, is_paired: bool):
+#     """Support initializing dataset from two configuration styles:
+#     1. Specify both train/test datasets in a single configuration,
+#         so they will have the same degradation model. Must be under
+#         config['dataset']. The configuration must have separate
+#         'train_path' and 'test_path' keys to load the different splits.
+#     2. Specify train and test datasets in separate configurations
+#         under config['dataset']['train'] and config['dataset']['test'].
+#     Note that the test dataset is optional but the train dataset is mandatory.
+#     """
+#     dset_cfg = cfg["dataset"]
+#     path_keys = {
+#         Datasplit.TRAIN: "train_path",
+#         Datasplit.TEST: "test_path",
+#     }
+#     if split.value in dset_cfg:
+#         dset_cfg = dset_cfg[split.value]
+#         data_path = dset_cfg.get("path", dset_cfg.get(path_keys[split]))
+#     else:
+#         data_path = dset_cfg.get(path_keys[split])
+#     if data_path is None:
+#         raise RuntimeError(
+#             f"{split.name} dataset configuration has no path specified."
+#         )
+#     perturbation = init_perturbation(dset_cfg.degradation, dset_cfg.noise)
+
+#     dset_name = dset_cfg["name"]
+#     shuffle_clean = split == Datasplit.TRAIN and not is_paired
+#     if dset_name == 'zip':
+#         from .image_folder_dataset import ZipFileDataset
+#         return ZipFileDataset(
+#             data_path,
+#             degradation=perturbation,
+#             shuffle_clean=shuffle_clean,
+#             dset_cfg=dset_cfg,
+#             split=split,
+#         )
+#     elif dset_name == 'patch':
+#         from .patch_dataset import PatchDataset
+#         return PatchDataset(
+#             data_path,
+#             degradation=perturbation,
+#             shuffle_clean=shuffle_clean,
+#             dset_cfg=dset_cfg,
+#             split=split,
+#         )
+#     elif dset_name == 'simple_patch':
+#         from .simple_patch_dataset import SimplePatchDataset
+#         return SimplePatchDataset(
+#             data_path,
+#             degradation=perturbation,
+#             shuffle_clean=shuffle_clean,
+#             dset_cfg=dset_cfg,
+#             split=split,
+#         )
+#     else:
+#         raise ValueError(dset_name)

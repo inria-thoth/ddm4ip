@@ -1,0 +1,8 @@
+name: "flow_matching"
+crop_patch_sizes: null
+n_accum_steps: 1
+diffusion:
+  type: edm
+  P_mean: -1.2
+  P_std: 1.2
+  sigma_data: 0.5

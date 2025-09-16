@@ -195,8 +195,6 @@ class BaseImageFolderDataset(torch.utils.data.Dataset):
             all_paths = ImagePath.load_all_paths(self.path, filter=filter)
         elif file_ext(self.path) == '.zip':
             all_paths = ZipImagePath.load_all_paths(self.path)
-        elif file_ext(self.path) == '.lmdb':
-            all_paths = LMDBImagePath.load_all_paths(self.path)
         elif file_ext(self.path) in IMG_EXTENSIONS:
             all_paths = [ImagePath(self.path.parent, self.path.name)]
         else:

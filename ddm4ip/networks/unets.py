@@ -10,6 +10,7 @@
 
 import numpy as np
 import torch
+from ddm4ip.networks.edm import EDMPrecond
 from ddm4ip.utils import distributed, persistence
 from ddm4ip.utils.torch_utils import center
 
@@ -531,6 +532,25 @@ def init_unet_with_defaults(cfg, img_size: tuple[int, int, int], cond_ch: int, l
             dropout=cfg.get("dropout", 0.0),
             channels_per_head=cfg.get("channels_per_head", 16),
             out_channels=cfg.get("out_channels", min(img_size[0], 3)),
+        )
+    elif kind == "edm":
+        if cond_ch > 0:
+            raise ValueError("EDM models don't yet support conditioning")
+        return EDMPrecond(
+            img_resolution=cfg.get("img_res", img_size[1:]),
+            img_channels=img_size[0],
+            label_dim=label_dim,
+            use_fp16=cfg.get("use_fp16", True),
+            model_type=cfg["model_type"],
+            augment_dim=9,  # not used in practice. Needed for model loading
+            channel_mult=cfg["channel_mult"],
+            model_channels=cfg["model_channels"],
+            resample_filter=cfg["resample_filter"],
+            encoder_type=cfg["encoder_type"],
+            decoder_type=cfg["decoder_type"],
+            embedding_type=cfg["embedding_type"],
+            dropout=cfg["dropout"],
+            channel_mult_noise=cfg["channel_mult_noise"],
         )
     else:
         raise ValueError(

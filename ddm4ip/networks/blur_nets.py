@@ -20,6 +20,341 @@ class BlurDegradationType(Enum):
     DOWNSAMPLING = 3
 
 
+class AbstractDegradationNetwork(nn.Module, abc.ABC):
+    def __init__(self, learn_noise: bool):
+        super().__init__()
+
+        self.learn_noise = learn_noise
+
+        self.noise_model = GaussianNoise(sigma=0.0)
+        self.sigma = None
+        if self.learn_noise:
+            # For now only Gaussian noise is supported
+            self.sigma = torch.nn.Parameter(torch.tensor([0.01]))
+
+    def forward(self, clean_img: torch.Tensor, return_physics: bool = False, **kwargs) -> torch.Tensor | tuple[torch.Tensor, deepinv.physics.Physics]:
+        physics = self.get_physics(**kwargs)
+        if return_physics:
+            return physics(clean_img), physics
+        return physics(clean_img)
+
+    @abc.abstractmethod
+    def get_physics(self, **kwargs) -> deepinv.physics.Physics:
+        pass
+
+
+class AbstractBlurNet(AbstractDegradationNetwork, abc.ABC):
+    def __init__(
+        self,
+        blur_type: BlurDegradationType,
+        padding: str,
+        learn_noise: bool,
+        **blur_kwargs,
+    ):
+        super().__init__(learn_noise=learn_noise)
+
+        self.degradation: deepinv.physics.Blur | deepinv.physics.Downsampling | PerPixelBlur
+        if blur_type == BlurDegradationType.BLUR:
+            self.degradation = Blur(
+                noise_model=self.noise_model, padding=padding, **blur_kwargs
+            )
+        elif blur_type == BlurDegradationType.PER_PIXEL_BLUR:
+            self.degradation = PerPixelBlur(
+                noise_model=self.noise_model, padding=padding, **blur_kwargs
+            )
+        elif blur_type == BlurDegradationType.DOWNSAMPLING:
+            self.degradation = deepinv.physics.Downsampling(
+                noise_model=self.noise_model, padding=padding, **blur_kwargs
+            )
+        else:
+            raise NotImplementedError(blur_type)
+
+    def get_noise_level(self, sigma: float | torch.Tensor | None = None) -> torch.Tensor:
+        if sigma is None and not self.learn_noise:
+            raise ValueError("Noise-level was not specified and is not set to be learnable.")
+        elif sigma is None:
+            assert self.sigma is not None  # should not happen
+            return self.sigma
+        else:
+            if isinstance(sigma, (float, int)):
+                # Necessary to prevent noise level going on CPU as
+                # deepinv `float_to_tensor` does not handle device placement
+                sigma = torch.tensor(sigma, device=torch.cuda.current_device(), dtype=torch.float32)
+            return sigma
+
+    def get_physics(
+        self,
+        sigma: float | torch.Tensor | None = None,
+        crop_filters: int = 0,
+        **kwargs
+    ) -> deepinv.physics.Physics:
+        """
+        Args:
+            sigma (float | torch.Tensor | None, optional): Gaussian noise level of for the physics.
+                This should only be provided if the noise level was not set to be a learnable parameter.
+                Defaults to None.
+            crop_filters (int, optional): Optionally crop edges of the blur filters.
+                This is only really useful at test time to remove artifacts from the
+                learned filters. Defaults to 0.
+        """
+        # Set sigma explicitly to avoid `update_parameters` on Gaussian noise class
+        # which sets sigma to be a buffer thus disallowing gradients.
+        self.noise_model.sigma = self.get_noise_level(sigma)  # pyright: ignore[reportAttributeAccessIssue]
+
+        kernels = self.get_kernel(**kwargs)
+
+        if crop_filters > 0:
+            kernels = kernels[..., crop_filters:-crop_filters, crop_filters:-crop_filters]
+            kernels = norm_sum_to_one(kernels)
+        # NOTE: Must set filter like this because the `Blur` class will reset
+        #      `requires_grad` to False on the filters
+        if self.degradation_type == BlurDegradationType.BLUR:
+            self.degradation.filter = kernels
+        elif self.degradation_type == BlurDegradationType.PER_PIXEL_BLUR:
+            self.degradation.filters = kernels  # pyright: ignore[reportAttributeAccessIssue]
+        elif self.degradation_type == BlurDegradationType.DOWNSAMPLING:
+            self.degradation.filter = kernels
+        else:
+            raise NotImplementedError(self.degradation_type)
+
+        return self.degradation
+
+    @abc.abstractmethod
+    def get_kernel(self, **kwargs) -> torch.Tensor:
+        pass
+
+
+@persistence.persistent_class
+class DirectKernel2(AbstractBlurNet):
+    def __init__(
+        self,
+        kernel_size: int,
+        padding: str,
+        factor: int = 1,
+        sum_to_one: bool = True,
+        learn_noise: bool = False,
+    ):
+        blur_type = BlurDegradationType.BLUR if factor == 1 else BlurDegradationType.DOWNSAMPLING
+        # Extra kwargs (e.g. factor when not downsampling) are simply ignored in deepinv.
+        super().__init__(blur_type=blur_type, padding=padding, factor=factor, learn_noise=learn_noise)
+        self.sum_to_one = sum_to_one
+        # Initialization with positive values only
+        kernel = torch.randn(1, 1, kernel_size, kernel_size).abs_()
+        kernel = norm_sum_to_one(kernel)
+        self.kernel = torch.nn.Parameter(kernel, requires_grad=True)
+
+    def get_kernel(self, **kwargs) -> torch.Tensor:
+        if self.sum_to_one:
+            return norm_sum_to_one(self.kernel)
+        return self.kernel
+
+
+@persistence.persistent_class
+class DirectCenterKernel2(AbstractBlurNet):
+    def __init__(
+        self,
+        psf_path: str | None,
+        kernel_size: int,
+        padding: str,
+        num_psfs: tuple[int, int] | None = None,
+        kernel_ch: int | None = None,
+        sum_to_one: bool = True,
+        learn_noise: bool = False,
+        initialization: Literal["random", "square"] = "random",
+    ):
+        super().__init__(BlurDegradationType.BLUR, padding=padding, learn_noise=learn_noise)
+        self.sum_to_one = sum_to_one
+        if psf_path is None:
+            assert num_psfs is not None, "psf_path is None so num_psfs must be specified"
+            assert kernel_ch is not None, "psf_path is None so kernel_ch must be specified"
+            psf_grid = get_default_psf_grid(num_psfs)
+            psf_shape = (psf_grid.shape[0], kernel_ch, kernel_size, kernel_size)
+        else:
+            psf = PSF.from_path(
+                psf_path=psf_path, filter_size=kernel_size, do_rotation=False
+            )
+            psf_grid = psf.loc
+            psf_shape = psf.psfs.shape
+        self.psf_grid = torch.nn.Buffer(psf_grid)
+
+        if initialization == "random":
+            empty_kernels = torch.randn(psf_shape).abs_()
+        elif initialization == "square":
+            kernel_grid = torch.zeros(psf_shape)
+            center_y, center_x = psf_shape[-2] // 2, psf_shape[-1] // 2
+            kernel_grid[:, :, center_y - 2 : center_y + 2 , center_x - 2 : center_x + 2] = 1
+            empty_kernels = kernel_grid
+        else:
+            raise NotImplementedError(
+                f"initialization {initialization} not implemented for DirectCenterKernel network."
+            )
+        empty_kernels = norm_sum_to_one(empty_kernels, eps=1e-5)
+        self.kernels = torch.nn.Parameter(empty_kernels, requires_grad=True)
+
+        distributed.print0("Initialized DirectCenterKernel model:")
+        distributed.print0(f"Direct spatially-varying PSF shape:    {self.kernels.shape}")
+        distributed.print0(f"Padding:                               {self.padding}")
+        distributed.print0(f"Initialization:                        {initialization}")
+        distributed.print0()
+
+    def get_kernel(self, conditioning: torch.Tensor | None = None, **kwargs):
+        # conditioning: B, 2(xy), H, W
+        if conditioning is None:
+            raise ValueError("conditioning cannot be None for DirectCenterKernel")
+        if conditioning.shape[1] != 2:
+            raise ValueError(f"DirectCenterKernel expects conditioning with 2 channels but found {conditioning.shape[1]}")
+
+        # Compute the mean (center-coordinate) of x, y values
+        centers = conditioning.mean(dim=(-1, -2))  # B, 2
+        interp_kernels = get_psf_at_pos(
+            psfs=self.kernels,
+            grid=self.psf_grid,
+            pos=centers,
+            norm_output=False,
+        )
+        if self.sum_to_one:
+            # NOTE: Here we have sometimes used `interp_kernels = interp_kernels.abs()`
+            #       to stabilize training.
+            interp_kernels = norm_sum_to_one(interp_kernels)
+        return interp_kernels  # shape  B, kc, kh, kw
+
+
+@persistence.persistent_class
+class ConvSR2(AbstractBlurNet):
+    """
+    Blur kernel with optional downsampling, implemented via a deep linear CNN.
+    """
+    def __init__(
+        self,
+        factor: int,
+        padding: str,
+        img_ch: int,
+        kernel_ch: int,
+        kernel_size: int,
+        learn_noise: bool = False,
+    ):
+        super().__init__(BlurDegradationType.DOWNSAMPLING, padding=padding, learn_noise=learn_noise, factor=factor)
+
+        self.kernel_size = kernel_size
+        self.kernel_ch = kernel_ch
+        if self.kernel_ch != 1 and self.kernel_ch != img_ch:
+            raise ValueError("Kernel channels must either be 1 or equal to the image channels.")
+
+        # Adapt padding keywords to Conv2d.
+        padding_strat = "valid" if padding == "valid" else "same"
+        padding_mode = "zeros" if padding == "valid" else padding
+        # Each channel is processed independently by the same kernel.
+        # Hence the channel dimension is merged into the batch dimension.
+        groups = self.kernel_ch
+        ch = 64 * groups
+        layers = [
+            nn.Conv2d(in_channels=self.kernel_ch, out_channels=ch, groups=groups,
+                      kernel_size=7, bias=False, padding=padding_strat, padding_mode=padding_mode),
+            nn.Conv2d(in_channels=ch, out_channels=ch, groups=groups,
+                      kernel_size=5, bias=False, padding=padding_strat, padding_mode=padding_mode),
+        ]
+        cur_field = 10  # (7-1) + (5-1)
+        req_field = self.kernel_size - 1
+        while cur_field < req_field:
+            if req_field - cur_field == 2:
+                layers.append(nn.Conv2d(in_channels=ch, out_channels=ch, groups=groups,
+                                        kernel_size=3, bias=False, padding=padding_strat, padding_mode=padding_mode),)
+                cur_field += 2
+            else:
+                layers.append(nn.Conv2d(in_channels=ch, out_channels=ch, groups=groups,
+                                        kernel_size=5, bias=False, padding=padding_strat, padding_mode=padding_mode),)
+                cur_field += 4
+        layers.extend([
+            nn.Conv2d(in_channels=ch, out_channels=ch, groups=groups,
+                      kernel_size=1, bias=False, padding=padding_strat, padding_mode=padding_mode),
+            nn.Conv2d(in_channels=ch, out_channels=groups, groups=groups,
+                      kernel_size=1, stride=factor, bias=False, padding=padding_strat, padding_mode=padding_mode),
+        ])
+        self.layers = nn.Sequential(*layers)
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                # Scale is important: optimization should start from small kernel values.
+                nn.init.xavier_normal_(m.weight, 0.1)
+
+        distributed.print0("Initialized ConvSR model:")
+        distributed.print0(f"Learning {self.tot_kernels} kernels with {self.kernel_ch} channels.")
+        distributed.print0(f"Padding:    {padding_strat}")
+        distributed.print0(f"Factor:     {factor}")
+        distributed.print0()
+
+    def forward(
+        self,
+        clean_img: torch.Tensor,
+        return_physics: bool = False,
+        sigma: float | torch.Tensor | None = 0.0,
+        **kwargs
+    ):
+        """Forward is explicit, not through the deepinv degradation object.
+        Noise modeling is still through the deepinv object!
+        """
+        self.noise_model.sigma = self.get_noise_level(sigma)  # pyright: ignore[reportAttributeAccessIssue]
+        B, C, H, W = clean_img.shape
+        if self.kernel_ch == 1:
+            clean_img = clean_img.view(B * C, 1, H, W)  # merge batch and channel
+        else:
+            assert clean_img.shape[1] == self.kernel_ch
+        out = self.layers(clean_img)
+        out = out.reshape(B, C, *out.shape[-2:])  # H, W may have changed
+        out = self.noise_model(out)
+        if return_physics:
+            physics = self.get_physics(sigma=sigma, **kwargs)
+            return out, physics
+        return out
+
+    def get_kernel(self, **kwargs) -> torch.Tensor:
+        delta = torch.ones((self.kernel_ch,)).cuda()
+        delta = delta[None, :, None, None]
+        for i, w in enumerate(self.layers.parameters()):
+            if i == 0:
+                curr_k = torch.nn.functional.conv2d(delta, w, padding=self.kernel_size - 1, groups=self.kernel_ch)
+            else:
+                curr_k = torch.nn.functional.conv2d(curr_k, w, groups=self.kernel_ch)  # pyright: ignore[reportPossiblyUnboundVariable]
+        kernel = curr_k  # pyright: ignore[reportPossiblyUnboundVariable]
+        return kernel
+
+
+@persistence.persistent_class
+class DirectPerPixelKernel2(AbstractBlurNet):
+    def __init__(self, psf_path: str, kernel_size: int, padding: str, learn_noise: bool):
+        super().__init__(BlurDegradationType.PER_PIXEL_BLUR, padding=padding, learn_noise=learn_noise)
+        self.psf = PSF.from_path(
+            psf_path=psf_path, filter_size=kernel_size, do_rotation=False
+        )
+        empty_kernels = torch.randn_like(self.psf.psfs).abs_()
+        empty_kernels = norm_sum_to_one(empty_kernels)
+        self.initial_param = torch.nn.Parameter(empty_kernels, requires_grad=True)
+
+    def get_kernel(self, conditioning=None, **kwargs):
+        # conditioning: B, 2(xy), H, W
+        if conditioning is None:
+            raise ValueError("conditioning cannot be None for `DirectPerPixelKernel`")
+        B, cch, H, W = conditioning.shape
+        if cch != 2:
+            raise ValueError(f"`DirectPerPixelKernel` expects conditioning with 2 channels but found {conditioning.shape[1]}")
+
+        # reshape such that we have B*H*W, 2 (the points at which we should interpolate)
+        # `conditioning` column-contiguous to avoid warning in `get_psf_at_pos`
+        positions = conditioning.permute(1, 0, 2, 3).reshape(2, -1).T
+        interp_kernels = get_psf_at_pos(
+            psfs=self.initial_param,
+            grid=self.psf.loc,
+            pos=positions,
+            norm_output=False,
+        )
+        # interp_kernels = interp_kernels.clamp_min(0)
+        interp_kernels = norm_sum_to_one(interp_kernels, eps=1e-5)
+        # kernel needs to be of shape  B, H*W, kc, kh, kw
+        interp_kernels = interp_kernels.reshape(B, H*W, *interp_kernels.shape[1:])
+        return interp_kernels
+
+
+
+
 class BlurNetBase(nn.Module, abc.ABC):
     def __init__(
         self,

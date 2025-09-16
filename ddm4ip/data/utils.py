@@ -89,7 +89,6 @@ def get_locmap(height, width):
     return torch.cat([map_h[None, ...], map_w[None, ...]], dim=-3)
 
 
-
 class AddLocMapTransform(v2.Transform):
     def __init__(self):
         super().__init__()

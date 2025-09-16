@@ -74,8 +74,8 @@ class PSF(torch.nn.Module):
         self.filter_size = (kernels.shape[-2], kernels.shape[-1])
         self.N = positions.shape[0]
 
-        self.register_buffer("loc", positions)
-        self.register_buffer("psfs", norm_sum_to_one(kernels))
+        self.loc = torch.nn.Buffer(positions)
+        self.psfs = torch.nn.Buffer(norm_sum_to_one(kernels))
 
         self.rot_psfs = None
         if do_rotation:
